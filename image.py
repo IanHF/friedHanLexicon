@@ -1,5 +1,6 @@
 #SPECIAL THANKS TO IAN WILLIAMS FOR HELPING ME WITH SOME DEBUGGING, PRAISE PROGRAMMER JESUS, PEACE BE UPON HIM
 #<3 IW
+import mdl
 from math import cos, sin, radians, pi as PI
 from random import randint
 import os
@@ -69,6 +70,7 @@ def make_scale( x, y, z ):
     return t
 
 def make_rotX( theta ):
+    
     t = new_matrix()
     ident(t)
     t[1][1] = cos(theta)
@@ -132,7 +134,7 @@ S_RES = 20 # Resolution for sphere
 T_RES = 20 # Resolution for torus
 
 # Light Variables
-LIGHT_VECTOR = normalize([1, .5, 1])
+LIGHT_VECTOR = normalize([.5, .75, 1])
 LIGHT_COLOR = [255, 255, 255]
 AMBIENT = [.1, .1, .1]
 DIFFUSE = [.5, .5, .5]
@@ -473,8 +475,7 @@ class Picture:
         point = 0
         while point < len(matrix[0]) - 1:
             if dot_product(normal(matrix, point), self.view_vector) >= 0:
-                color = [randint(0, 255), randint(0, 255), randint(0, 255)];
-                color = [255, 0, 255]
+                color = [50, 50, 50]
                 new_color = [color[i] * AMBIENT[i] for i in range(3)]
                 for i in range(3):
                     nl = dot_product(normalize(normal(matrix, point)), LIGHT_VECTOR);
@@ -611,12 +612,111 @@ def parse_file( fname, transform, screen, color ):
 
         c+= 1
 
-def main():
+
+def run(filename):
+    """
+    This function runs an mdl script
+    """
+    global AMBIENT
+    global DIFFUSE
+    global SPECULAR
     screen = Picture('image', 500, 500)
+    p = mdl.parseFile(filename)
+
+    if p:
+        (commands, symbols) = p
+    else:
+        print("Parsing failed.")
+        return
+
+    view = [0, 0, 1];
+    ambient = [50, 50, 50]
+    light = [[0.5, 0.75, 1],
+             [255, 255, 255]]
+
+    color = [0, 0, 0]
+    tmp = new_matrix()
+    ident( tmp )
+
+    stack = [tmp]
+    #screen = new_screen()
+    #zbuffer = new_zbuffer()
+    tmp = []
+    step_3d = 100
+    consts = ''
+    coords = []
+    coords1 = []
+    symbols['.white'] = ['constants',
+                         {'red': [0.2, 0.5, 0.5],
+                          'green': [0.2, 0.5, 0.5],
+                          'blue': [0.2, 0.5, 0.5]}]
+    reflect = '.white'
+
+    print(symbols)
+    for command in commands:
+        if command.has_key("constants") and command["constants"]:
+            con = symbols[command["constants"]][1]
+            AMBIENT = [con['red'][0], con['green'][0], con['blue'][0]]
+            DIFFUSE = [con['red'][1], con['green'][1], con['blue'][1]]
+            SPECULAR = [con['red'][2], con['green'][2], con['blue'][2]]
+        else:
+            AMBIENT = [.1, .1, .1]
+            DIFFUSE = [.5, .5, .5]
+            SPECULAR = [.5, .5, .5]
+            pass
+        if command["op"] == "push":
+            stack.append([[col for col in row] for row in stack[-1]])
+        elif command["op"] == "pop":
+            stack.pop()
+        elif command["op"] == "move":
+            t = make_translate(*command["args"])
+            matrix_mult(stack[-1], t)
+            stack[-1] = t
+        elif command["op"] == "rotate":
+            theta = float(command["args"][1]) * (PI / 180)
+            if command["args"][0] == "x":
+                t = make_rotX(theta)
+            elif command["args"][0] == "y":
+                t = make_rotY(theta)
+            elif command["args"][0] == "z":
+                t = make_rotZ(theta)
+            matrix_mult(stack[-1], t)
+            stack[-1] = t                
+        elif command["op"] == "scale":
+            t = make_scale(*command["args"])
+            matrix_mult(stack[-1], t)
+            stack[-1] = t
+        elif command["op"] == "box":
+            screen.add_box(*command["args"])
+            matrix_mult(stack[-1], screen.triangle_matrix )
+            screen.draw_polygons()
+            screen.clear_triangle_matrix()
+        elif command["op"] == "sphere":
+            screen.add_sphere(*command["args"])
+            matrix_mult(stack[-1], screen.triangle_matrix )
+            screen.draw_polygons()
+            screen.clear_triangle_matrix()
+        elif command["op"] == "torus":
+            screen.add_torus(*command["args"])
+            matrix_mult(stack[-1], screen.triangle_matrix )
+            screen.draw_polygons()
+            screen.clear_triangle_matrix()
+        elif command["op"] == "line":
+            screen.add_line(*command["args"])
+            matrix_mult(stack[-1], screen.edge_matrix )
+            screen.draw_polygons()
+            screen.clear_triangle_matrix()
+        elif command["op"] == "save" or command["op"] == "display":
+            screen.save()
+            if command["op"] == 'display':
+                os.system('display *.ppm')
+        
+def main():
+    
     transform = [ [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
     color = [255, 255, 255]
     ident(transform)
-    parse_file( 'advanced_script', transform, screen, color )
+    run( 'face.mdl')
 
 if __name__ == "__main__":
     main()
